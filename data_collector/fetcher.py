@@ -1,5 +1,6 @@
-from json import dump, load
+from json import dump, load, loads
 from tqdm import tqdm
+from joblib import Parallel, delayed, parallel_backend
 
 import requests
 import pypistats
@@ -19,12 +20,35 @@ def get_dependencies(package):
 
 
 def get_stats(package):
-    return pypistats.overall(package, mirrors=True, format="json")
+    return loads(pypistats.overall(package, mirrors=True, format="json"))
 
 
 def checkpoint(mega_meta, id):
     with open("checkpoint/meta_package_data_{}.json".format(id), "w") as f:
-        dump(mega_meta, f)
+        dump(mega_meta, f, indent=4)
+
+
+def get_package_stats(package):
+
+    package = package.split("/")[2]
+
+    try:
+        deps = get_dependencies(package)
+    except:
+        deps = {"status": "Failed"}
+
+    try:
+        stats = get_stats(package)
+    except:
+        stats = {"status": "Failed"}
+
+    return {"info": deps, "stats": stats}
+
+
+def parallelly_process(packages, n_jobs=64):
+    with parallel_backend("threading", n_jobs=n_jobs):
+        mega_meta = Parallel()(delayed(get_package_stats)(package) for package in packages)
+    return mega_meta
 
 
 if __name__ == '__main__':
@@ -32,30 +56,15 @@ if __name__ == '__main__':
     packages = read_packages()
     print(len(packages))
 
-    mega_meta = {}
-    partial_meta = {}
-    failures = {"deps": [], "stats": []}
+    chunk_size = 1000
 
-    for id, package in tqdm(enumerate(packages)):
-        package = package.split("/")[2]
+    mega_meta = []
 
-        try:
-            deps = get_dependencies(package)
-        except:
-            failures["deps"].append(package)
-            deps = {"status": "Failed"}
-
-        try:
-            stats = get_stats(package)
-        except:
-            failures["stats"].append(package)
-            stats = {"status": "Failed"}
-
-        mega_meta[package] = {"info": deps, "stats": stats}
-        partial_meta[package] = mega_meta[package]
-
-        if id % 1000 == 0:
-            checkpoint(partial_meta, id)
-            partial_meta = {}
+    for i in tqdm(range(0, len(packages), chunk_size)):
+        chunk = packages[i:i+chunk_size]
+        partial_meta = parallelly_process(chunk)
+        mega_meta.extend(partial_meta)
+        checkpoint(partial_meta, i)
+        # break
 
     checkpoint(mega_meta, "final")
