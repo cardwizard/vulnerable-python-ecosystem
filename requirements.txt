@@ -1,2 +1,6 @@
 pipdeptree
 BeautifulSoup
+pkginfo
+requests
+pypistats
+tqdm

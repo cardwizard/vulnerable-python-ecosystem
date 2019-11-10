@@ -1,59 +1,70 @@
-from pipdeptree import get_installed_distributions, build_dist_index, construct_tree
-from bs4 import BeautifulSoup
-from json import dump
-from urllib.request import urlretrieve
-from pathlib import Path
+from json import dump, load, loads
+from tqdm import tqdm
+from joblib import Parallel, delayed, parallel_backend
 
 import requests
-import re
-
-def create_tree():
-    pkgs = get_installed_distributions()
-    dist_index = build_dist_index(pkgs)
-    tree = construct_tree(dist_index)
-
-    return tree
+import pypistats
 
 
-def get_package_list():
-    """
-    Helper function to retrieve package names from the Pypi URL. Save it to a json for future use.
+def read_packages():
+    with open("python_packages_list.json", "r") as f:
+        package_info = load(f)
 
-    """
-    r = requests.get("https://pypi.org/simple/")
-    soup = BeautifulSoup(r.content, features='html.parser')
-    data = []
-
-    for link in soup.find_all('a', href=True):
-        data.append(link["href"])
-
-    with open("python_packages_list.json", "w") as f:
-        dump(data, f)
+    return package_info
 
 
-def download(download_link, output_folder, package_name, version):
-    url = download_link
-    dst = Path(output_folder).joinpath("{}-{}.tar.gz".format(package_name, version))
-    urlretrieve(url, dst)
+def get_dependencies(package):
+    url = 'https://pypi.org/pypi/{}/json'
+    json = requests.get(url.format(package)).json()
+    return json
 
 
-def get_package(package_name):
-    """
-    Note that package name already starts with /simple/
-    This downloader only focuses on .tar.gz files
+def get_stats(package):
+    return loads(pypistats.overall(package, mirrors=True, format="json"))
 
-    :param package_name:
-    :return:
-    """
-    url = "https://pypi.org{}".format(package_name)
-    r = requests.get(url)
-    soup = BeautifulSoup(r.content, features='html.parser')
 
-    for id, link in enumerate(soup.find_all('a', href=True)):
-        if ".tar.gz" in link["href"]:
-            download(link["href"], "downloaded_packages", package_name.split("/")[-2], id)
+def checkpoint(mega_meta, id):
+    with open("checkpoint/meta_package_data_{}.json".format(id), "w") as f:
+        dump(mega_meta, f, indent=4)
+
+
+def get_package_stats(package):
+
+    package = package.split("/")[2]
+
+    try:
+        deps = get_dependencies(package)
+    except:
+        deps = {"status": "Failed"}
+
+    try:
+        stats = get_stats(package)
+    except:
+        stats = {"status": "Failed"}
+
+    return {"info": deps, "stats": stats}
+
+
+def parallelly_process(packages, n_jobs=64):
+    with parallel_backend("threading", n_jobs=n_jobs):
+        mega_meta = Parallel()(delayed(get_package_stats)(package) for package in packages)
+    return mega_meta
 
 
 if __name__ == '__main__':
-    # get_package_list()
-    get_package("/simple/aarghparse/")
+
+    packages = read_packages()
+    print(len(packages))
+
+    chunk_size = 1000
+
+    mega_meta = []
+
+    for i in tqdm(range(0, len(packages), chunk_size)):
+        chunk = packages[i:i+chunk_size]
+        partial_meta = parallelly_process(chunk)
+        mega_meta.extend(partial_meta)
+        checkpoint(partial_meta, i)
+        # break
+
+    checkpoint(mega_meta, "final")
