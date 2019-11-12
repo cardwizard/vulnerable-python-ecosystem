@@ -38,16 +38,16 @@ def get_package_stats(package):
         deps = {"status": "Failed"}
 
     try:
-        stats = get_stats(package)
+        # stats = get_stats(package)
+        stats = {}
     except:
         stats = {"status": "Failed"}
 
     return {"info": deps, "stats": stats}
 
 
-def parallelly_process(packages, n_jobs=64):
-    with parallel_backend("threading", n_jobs=n_jobs):
-        mega_meta = Parallel()(delayed(get_package_stats)(package) for package in packages)
+def parallelly_process(packages, n_jobs=20):
+    mega_meta = Parallel(n_jobs=n_jobs)(delayed(get_package_stats)(package) for package in packages)
     return mega_meta
 
 
@@ -56,15 +56,15 @@ if __name__ == '__main__':
     packages = read_packages()
     print(len(packages))
 
-    chunk_size = 1000
+    chunk_size = 100
 
-    mega_meta = []
+    # mega_meta = []
 
-    for i in tqdm(range(0, len(packages), chunk_size)):
+    for i in tqdm(range(154708, len(packages), chunk_size)):
         chunk = packages[i:i+chunk_size]
         partial_meta = parallelly_process(chunk)
-        mega_meta.extend(partial_meta)
+        # mega_meta.extend(partial_meta)
         checkpoint(partial_meta, i)
         # break
 
-    checkpoint(mega_meta, "final")
+    # checkpoint(mega_meta, "final")
