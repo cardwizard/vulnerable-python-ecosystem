@@ -1,3 +1,7 @@
 .idea
 *.swp
 data_collector/downloaded_packages
+.vscode
+__pycache__/
+*.AppImage
+env/
