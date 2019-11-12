@@ -2,7 +2,8 @@ from neo4j import GraphDatabase
 
 from json import load, loads
 
-data_uri = 'bolt://localhost:7687'
+port = 7688
+data_uri = 'bolt://localhost:' + str(port)
 
 username = 'neo4j'
 password = 'abc123'
@@ -10,14 +11,6 @@ password = 'abc123'
 data_creds = None
 
 driver = GraphDatabase.driver(data_uri, auth=data_creds)
-
-# Required keys are name, version, and metadata version
-metadata_keys = ['Author', 'Author-email',
-    'Maintainer', 'Maintainer-email',
-    'License', 
-    'Requires-Dist', # Dist-utils packages that are required by this packages
-    'Requires-External' # 
-    ]
 
 def close_db():
     driver.close()
@@ -29,14 +22,17 @@ def clear_db():
     print("Cleared graph.")
 
 """
-@param new_package_data : Python dictionary of package data to be inserted
+@param pkg_data : Python dictionary of package data to be inserted
 """
 
 def push_pkg(pkg_data):
 
     name = pkg_data['name']
-    maintainer_info = (pkg_data['main_name'], pkg_data['main_email'])
-    author_info = (pkg_data['auth_name'], pkg_data['auth_email'])
+    #maintainer_info = (pkg_data['main_name'], pkg_data['main_email'])
+    #author_info = pkg_data['auth_name'], pkg_data['auth_email'])
+
+    maintainer_info = pkg_data['maintainer_email']
+    author_info = pkg_data['author_email']
     downloads = pkg_data['downloads']
     lic = pkg_data['license']
     dependences = pkg_data['dep_list']
@@ -58,7 +54,7 @@ def push_pkg(pkg_data):
         else:
             pkg_id = result.value()
             print("Adding info to package with id ", pkg_id)
-            
+
             session.run("MATCH (n:Package) WHERE id(n) = $pkg_id "
                     "SET n.main_name = $main_name "
                     "SET n.main_email = $main_email "
@@ -72,21 +68,10 @@ def push_pkg(pkg_data):
                 downloads=downloads, license=lic
             )
 
-        """
-        session.run("MERGE (n:Package {name: $name})" 
-            "SET n.main_name = $main_name"
-            "SET n.main_email = $main_email"
-            "SET n.auth_name = $auth_name"
-            "SET n.auth_email = $auth_email"
-            "SET n.downloads = $downloads"
-            "SET n.license = $license",
-            name=name,
-            main_name=maintainer_info[0], main_email=maintainer_info[1],
-            auth_name=author_info[0], auth_email=author_info[1],
-            downloads=downloads, license=lic)
-        """
-
         for dep in dependences:
+            if dep == "UNKNOWN":
+                continue   
+            
             try:
                 print("Added dep: ", dep)
 
