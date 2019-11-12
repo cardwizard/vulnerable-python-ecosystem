@@ -1,6 +1,7 @@
 .idea
 *.swp
 data_collector/downloaded_packages
+data_collector/checkpoint
 .vscode
 __pycache__/
 *.AppImage
