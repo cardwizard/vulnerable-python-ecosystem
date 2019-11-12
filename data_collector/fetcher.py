@@ -53,7 +53,8 @@ def parallelly_process(packages, n_jobs=64):
 
 if __name__ == '__main__':
 
-    packages = read_packages()
+    #packages = read_packages()
+    packages = ['/simple/requests/']
     print(len(packages))
 
     chunk_size = 1000
