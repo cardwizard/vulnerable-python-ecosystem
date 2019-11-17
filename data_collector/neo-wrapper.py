@@ -1,7 +1,5 @@
 from neo4j import GraphDatabase
 
-from json import load, loads
-
 port = 7688
 data_uri = 'bolt://localhost:' + str(port)
 
@@ -35,36 +33,33 @@ def push_pkg(pkg_data):
     author_info = pkg_data['author_email']
     downloads = pkg_data['downloads']
     lic = pkg_data['license']
+    version = pkg_data['version']
     dependences = pkg_data['dep_list']
 
     with driver.session() as session:
         result = session.run("MATCH (n:Package {name: $name}) RETURN id(n)", name=name).single()
         
-        print(result)
-
         if result == None:
-            print("Result was none")
             result = session.run("CREATE (n:Package {name: $name," 
-                "main_name: $main_name, main_email:$main_email, auth_name:$auth_name, auth_email:$auth_email,"
+                "main_email:$main_emailauth_email:$auth_email, version: $version"
                 "downloads: $downloads, license: $license}) RETURN id(n)",
                 name=name,
-                main_name=maintainer_info[0], main_email=maintainer_info[1],
-                auth_name=author_info[0], auth_email=author_info[1],
+                main_email=maintainer_info,
+                auth_email=author_info, version=version,
                 downloads=downloads, license=lic).single().value()
         else:
             pkg_id = result.value()
-            print("Adding info to package with id ", pkg_id)
 
             session.run("MATCH (n:Package) WHERE id(n) = $pkg_id "
-                    "SET n.main_name = $main_name "
                     "SET n.main_email = $main_email "
-                    "SET n.auth_name = $auth_name "
                     "SET n.auth_email = $auth_email "
+                    "SET n.version = $version"
                     "SET n.downloads = $downloads "
                     "SET n.license = $license",
                 pkg_id=pkg_id,
-                main_name=maintainer_info[0], main_email=maintainer_info[1],
-                auth_name=author_info[0], auth_email=author_info[1],
+                main_email=maintainer_info,
+                auth_email=author_info,
+                version=version,
                 downloads=downloads, license=lic
             )
 
@@ -73,19 +68,32 @@ def push_pkg(pkg_data):
                 continue   
             
             try:
-                print("Added dep: ", dep)
-
                 #dep_id = session.run("MATCH (n:Package {name: $name}) RETURN id(n)", name=dep).single()
                 #session.run("MERGE (n:Package {name: $name})-[:REQURES]->(m:Package {name: $mname})", name=name, mname=dep)
             
                 session.run("MATCH (n:Package {name: $name}) "
                     "MERGE (m:Package {name: $depname}) "
-                    "CREATE (n)-[:REQUIRES]->(m)",
+                    "MERGE (n)-[:REQUIRES]->(m)",
                     name=name, depname=dep)
             
             except Exception as e:
                 print("Exception", e.__str__())
 
+def get_dependency_counts(packages):
+    dep_counts = [0] * len(packages)
+
+    with driver.session() as session:
+
+        for i, pkg_name in tqdm(enumerate(packages)):
+       
+            result = session.run("match (n {name: $name})<-[*1..]-(dst) return count(distinct dst)", name=pkg_name).single()
+
+            if result == None:
+                continue
+            else:
+                dep_counts[i] = result.value()
+
+    return dep_counts
         
 if __name__ == '__main__':
     print("Running tests for neo-wrapper.")
